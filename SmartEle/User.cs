@@ -49,7 +49,7 @@
         /// <summary>
         /// 用户使用的电梯组
         /// </summary>
-        public Eles InEles;
+        public ElevatorBank InElevatorBank;
 
         /// <summary>
         /// 用户当前状态
@@ -71,13 +71,13 @@
         /// </summary>
         /// <param name="id"></param>
         /// <param name="from"></param>
-        /// <param name="eles"></param>
-        public User(int id,int from,Eles eles)
+        /// <param name="elevatorBank"></param>
+        public User(int id,int from,ElevatorBank elevatorBank)
         {
             _userid = id;
             Status = UserStatus.UsNone;
             FromFloor = from;
-            InEles = eles;
+            InElevatorBank = elevatorBank;
         }
 
         /// <summary>
@@ -87,53 +87,51 @@
         /// <returns>返回空字符串表示请求成功，非空表示返回请求失败原因</returns>
         public string UserRequestToFloor(int to)
         {
-            if (InEles==null)
+            //TODO 应该修改为请求加入到电梯组请求队列，由电梯组安排
+            if (InElevatorBank==null)
                 return "暂无可使用电梯组！";
-            if (Status == UserStatus.UsNone)
+            switch (Status)
             {
-                if (FromFloor == to)
-                    return "您已经在目的楼层";
-                ToFloor = to;
-                //用户请求
-                Ele ele = InEles.Request(this, to);
-                if (ele == null)
-                {
-                    //请求电梯失败
-                    return "暂无可使用电梯！";
-                }
-                if (UserWaitFloor(ele))
+                case UserStatus.UsNone:
+                    {
+                        if (FromFloor == to)
+                            return "您已经在目的楼层";
+                        ToFloor = to;
+                        //用户请求
+                        Ele ele = InElevatorBank.Request(this, to);
+                        if (ele == null)
+                        {
+                            //请求电梯失败
+                            return "暂无可使用电梯！";
+                        }
+                        return UserWaitFloor(ele) ? string.Empty : "等待电梯失败！";
+                    }
+                case UserStatus.UsWait:
+                    {
+                        //用户在等待电梯状态下重新请求时，先移除原目的
+                        if (InOrWaitEle == null)
+                            return "无效请求信息！";
+                        InOrWaitEle.RemoveUserRequest(this);
+                        //重新生成请地注信息
+                        if (FromFloor == to)
+                            return "您已经在目的楼层";
+                        ToFloor = to;
+                        //用户请求
+                        Status = UserStatus.UsNone;
+                        Ele ele = InElevatorBank.Request(this, to);
+                        if (ele == null)
+                        {
+                            //请求电梯失败
+                            return "暂无可使用电梯！";
+                        }
+                        return UserWaitFloor(ele) ? string.Empty : "等待电梯失败！";
+                    }
+                case UserStatus.UsInEle:
+                    if (InOrWaitEle == null)
+                        return "无效请求信息！";
+                    InOrWaitEle.ResetUserRequest(this,to);
+                    ToFloor = to;
                     return string.Empty;
-                else
-                    return "等待电梯失败！";
-            }else if (Status == UserStatus.UsWait)
-            {
-                //先移除原目的
-                if (InOrWaitEle == null)
-                    return "无效请求信息！";
-                InOrWaitEle.RemoveUserRequest(this);
-                //重新生成请地注信息
-                if (FromFloor == to)
-                    return "您已经在目的楼层";
-                ToFloor = to;
-                //用户请求
-                Ele ele = InEles.Request(this, to);
-                if (ele == null)
-                {
-                    //请求电梯失败
-                    return "暂无可使用电梯！";
-                }
-                if (UserWaitFloor(ele))
-                    return string.Empty;
-                else
-                    return "等待电梯失败！";
-            }else if (Status == UserStatus.UsInEle)
-            {
-                //变更请求
-                if (InOrWaitEle == null)
-                    return "无效请求信息！";
-                InOrWaitEle.ResetUserRequest(this,to);
-                ToFloor = to;
-                return string.Empty;
             }
             return string.Empty;
         }
@@ -154,7 +152,6 @@
                 InOrWaitEle = waitEle;
                 return true;
             }
-
             return false;
         }
 
@@ -173,8 +170,11 @@
         /// <returns></returns>
         public int GetNeedWaitTime()
         {
-            //TODO
-            return 0;
+            if (Status == UserStatus.UsInEle)
+                return 0;
+            if (Status == UserStatus.UsNone||InOrWaitEle==null)
+                return int.MaxValue;
+            return InOrWaitEle.ComNowRunToFloor(ToFloor);
         }
 
         /// <summary>
@@ -183,8 +183,10 @@
         /// <returns></returns>
         public int GetNeedAllTime()
         {
-            //TODO
-            return 0;
+            if (Status == UserStatus.UsNone || InOrWaitEle == null)
+                return int.MaxValue;
+
+            return InOrWaitEle.ComRunToFloor(Status == UserStatus.UsInEle?NowFloor:FromFloor,ToFloor);
         }
 
         /// <summary>
@@ -193,18 +195,35 @@
         /// <returns></returns>
         public bool UserInFloor()
         {
-            //TODO
-            return false;
+            if (Status != UserStatus.UsWait)
+                return false;
+            Status = UserStatus.UsInEle;
+            NowFloor = FromFloor;
+            return true;
+        }
+
+        /// <summary>
+        /// 电梯载到新的楼层
+        /// </summary>
+        /// <param name="newfloor"></param>
+        public void EleToNewFloor(int newfloor)
+        {
+            //只在用户在电梯中时才会改变当前层
+            if (Status == UserStatus.UsInEle)
+            {
+                NowFloor = newfloor;
+            }
         }
 
         /// <summary>
         /// 用户到达楼层
         /// </summary>
-        /// <returns></returns>
+        /// <returns>返回所有用时，包括等待电梯及在电梯中运行时间</returns>
         public int UserToFloor()
         {
             Status = UserStatus.UsNone;
-            
+            NowFloor = ToFloor;
+            return UseTime;
         }
 
     }

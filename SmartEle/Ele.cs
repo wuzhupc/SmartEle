@@ -46,7 +46,7 @@ namespace SmartEle
         /// <summary>
         /// 所属电梯组
         /// </summary>
-        private readonly Eles _eles;
+        private readonly ElevatorBank _elevatorBank;
 
         /// <summary>
         /// 当前楼层
@@ -71,12 +71,12 @@ namespace SmartEle
         /// <summary>
         /// 构造函数
         /// </summary>
-        /// <param name="eles"></param>
+        /// <param name="elevatorBank"></param>
         /// <param name="eleid"></param>
         /// <param name="initFloor"></param>
-        public Ele(Eles eles,int eleid,int initFloor)
+        public Ele(ElevatorBank elevatorBank,int eleid,int initFloor)
         {
-            _eles = eles;
+            _elevatorBank = elevatorBank;
             Eleid = eleid;
             NowFloor = initFloor;
             NowStatus = EleStatus.EsWait;
@@ -116,11 +116,11 @@ namespace SmartEle
                         if (NowFloor < ri.Floor)
                         {
                             NowStatus = EleStatus.EsRunUp;
-                            NextFloorTime = _eles.OneFloorRunTime;
+                            NextFloorTime = _elevatorBank.OneFloorRunTime;
                         }else if (NowFloor > ri.Floor)
                         {
                             NowStatus = EleStatus.EsRunDown;
-                            NextFloorTime = _eles.OneFloorRunTime;   
+                            NextFloorTime = _elevatorBank.OneFloorRunTime;   
                         }
                     }
                     break;
@@ -130,17 +130,17 @@ namespace SmartEle
                     {
                         RemoveAllNowFloorRequest();
                         NowStatus = EleStatus.EsRunUpWait;
-                        NextFloorTime = _eles.StopOverTime;
+                        NextFloorTime = _elevatorBank.StopOverTime;
                     }
                     else
                     {
                         NowStatus = EleStatus.EsRunUp;
-                        NextFloorTime = _eles.OneFloorRunTime;
+                        NextFloorTime = _elevatorBank.OneFloorRunTime;
                     }
                     break;
                 case EleStatus.EsRunUpWait:
                     NowStatus = EleStatus.EsRunUp;
-                    NextFloorTime = _eles.OneFloorRunTime;
+                    NextFloorTime = _elevatorBank.OneFloorRunTime;
                     break;
                 case EleStatus.EsRunDown:
                     NowFloor--;
@@ -148,23 +148,25 @@ namespace SmartEle
                     {
                         RemoveAllNowFloorRequest();
                         NowStatus = EleStatus.EsRunDownWait;
-                        NextFloorTime = _eles.StopOverTime;
+                        NextFloorTime = _elevatorBank.StopOverTime;
                     }
                     else
                     {
                         NowStatus = EleStatus.EsRunDown;
-                        NextFloorTime = _eles.OneFloorRunTime;
+                        NextFloorTime = _elevatorBank.OneFloorRunTime;
                     }
                     break;
                 case EleStatus.EsRunDownWait:
                     NowStatus = EleStatus.EsRunDown;
-                    NextFloorTime = _eles.OneFloorRunTime;
+                    NextFloorTime = _elevatorBank.OneFloorRunTime;
                     break;
             }
+            //
+            ChangeAllUserToNewFloor();
             //判断到顶层或底层及是否到请求的最高或最低层
             if (NowStatus == EleStatus.EsRunUp || NowStatus == EleStatus.EsRunUpWait)
             {
-                if (NowFloor == _eles.AllFloor || NowFloor >=
+                if (NowFloor == _elevatorBank.AllFloor || NowFloor >=
                     GetNeedRunMaxFloor())
                 {
                     NowStatus = NowStatus == EleStatus.EsRunUp ? EleStatus.EsRunDown : EleStatus.EsRunDownWait;
@@ -261,6 +263,10 @@ namespace SmartEle
             AddRequest(newri);
         }
 
+        /// <summary>
+        /// 将用户请求加入请求列表
+        /// </summary>
+        /// <param name="newri"></param>
         private void AddRequest(RequestInfo newri)
         {
             //计算插入位置
@@ -295,6 +301,10 @@ namespace SmartEle
                 Requests.Insert(0, newri);
         }
 
+        /// <summary>
+        /// 移除某用户的进电梯请求
+        /// </summary>
+        /// <param name="user"></param>
         private void RemoveInRequest(User user)
         {
             for (int i = 0; i < Requests.Count; i++)
@@ -306,6 +316,10 @@ namespace SmartEle
             }
         }
 
+        /// <summary>
+        /// 移除某用户出电梯请求
+        /// </summary>
+        /// <param name="user"></param>
         private void RemoveOutRequest(User user)
         {
             for (int i = 0; i < Requests.Count; i++)
@@ -329,6 +343,22 @@ namespace SmartEle
                 RequestInfo ri = (RequestInfo) Requests[i];
                 if(ri.Oper==OperType.OtOut)
                     ri.RequestUser.TickUseTime();
+            }
+        }
+
+        /// <summary>
+        /// 变更电梯中所有用户的楼层信息
+        /// </summary>
+        private void ChangeAllUserToNewFloor()
+        {
+            if (Requests == null || Requests.Count == 0)
+                return;
+            for (int i = 0; i < Requests.Count; i++)
+            {
+                RequestInfo ri = (RequestInfo) Requests[i];
+                if(ri.Oper == OperType.OtOut &&
+                    ri.RequestUser.Status==UserStatus.UsInEle)
+                    ri.RequestUser.EleToNewFloor(NowFloor);
             }
         }
 
@@ -392,7 +422,7 @@ namespace SmartEle
 
         private int GetNeedRunMinFloor()
         {
-            int minFloor = _eles.AllFloor;
+            int minFloor = _elevatorBank.AllFloor;
             if (Requests == null || Requests.Count == 0)
                 return minFloor;
 
@@ -403,6 +433,221 @@ namespace SmartEle
                     minFloor = ri.Floor;
             }
             return minFloor;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="now">当前楼层</param>
+        /// <param name="from">起始楼层</param>
+        /// <param name="to">目的楼层</param>
+        /// <param name="status">EsRunDown 或者 EsRunUp</param>
+        /// <returns></returns>
+        private int ComRunToFloorNum(int now,int from, int to,EleStatus status)
+        {
+            if (status != EleStatus.EsRunDown && status != EleStatus.EsRunUp)
+                return _elevatorBank.AllFloor;
+            if (now == from)//只要计算起点到终点
+            {
+                if (from == to) return 0;
+                if (from < to)
+                {
+                    if (status == EleStatus.EsRunUp)
+                        return to - from;
+                    //向下运行时
+                    //计算要到达的最低楼层
+                    int min = GetNeedRunMinFloor();
+                    if (min > from)
+                        return to - from;
+                    return from - min + to - min;
+                }
+                //from>to
+                if (status == EleStatus.EsRunDown)
+                    return @from - to;
+                int max = GetNeedRunMaxFloor();
+                if (max < @from)
+                    return @from - to;
+                return max - @from + max - to;
+            }
+            
+            //now->from
+           int count = ComRunToFloorNum(now, now, from, status);
+           //from->to
+           count += ComRunToFloorNum(from, from, to, status);
+           return count;
+        }
+
+        /// <summary>
+        /// 设置请求的状态是否被计算过
+        /// </summary>
+        /// <param name="min"></param>
+        /// <param name="max"></param>
+        /// <param name="hascom"></param>
+        private void SetAllRequsetComStatus(int min, int max, bool hascom)
+        {
+            if (Requests == null || Requests.Count == 0 || min>max)
+                return;
+            for (var i = 0; i < Requests.Count; i++)
+            {
+                var ri = (RequestInfo) Requests[i];
+                if(ri.Floor<min||ri.Floor>max||ri.HasCom==hascom) continue;
+                ri.HasCom = hascom;
+            }
+        }
+
+
+        /// <summary>
+        /// 计算当前层到目的层需要停留几次，注意计算前调用SetAllRequsetComStatus(min,max,false);
+        /// </summary>
+        /// <param name="now"></param>
+        /// <param name="from"></param>
+        /// <param name="to"></param>
+        /// <param name="status"></param>
+        /// <returns></returns>
+        private int ComRunToFloorStopNum(int now ,int from,int to,EleStatus status)
+        {
+            if (Requests == null || Requests.Count == 0)
+                return 0;
+            if (status != EleStatus.EsRunDown && status != EleStatus.EsRunUp)
+                return Requests.Count;
+            
+            int count;
+            if (now == from)//只要计算起点到终点
+            {
+                if (from == to) return 0;
+
+                if (from < to)
+                {
+                    count = 0;
+                    int tfloor = -1;
+                    if (status == EleStatus.EsRunUp)
+                    {
+                        for (int i = 0; i < Requests.Count; i++)
+                        {
+                            RequestInfo ri = (RequestInfo)Requests[i];
+                            if (!ri.HasCom&&
+                                tfloor!=ri.Floor&&ri.Floor >= from && ri.Floor <= to)
+                                count++;
+                            tfloor = ri.Floor;
+                        }
+                    }
+                    else //向下运行时
+                    {
+                        //计算要到达的最低楼层
+                        int min = GetNeedRunMinFloor();
+                        if (min > from)
+                        {
+                            return ComRunToFloorStopNum(from, from, to, EleStatus.EsRunUp);
+                        }
+                        //先运行到最低层
+                        count += ComRunToFloorStopNum(from,from, min, EleStatus.EsRunDown);
+                        SetAllRequsetComStatus(min,from,true);//防止重复计算，因为这些楼层已经到过
+                        //再运行到目的层
+                        count += ComRunToFloorStopNum(min, min, to, EleStatus.EsRunUp);
+                        
+                    }
+                }
+                else //from>to
+                {
+                    count = 0;
+                    int tfloor = -1;
+                    if (status == EleStatus.EsRunDown)
+                    {
+                        for (int i = 0; i < Requests.Count; i++)
+                        {
+                            RequestInfo ri = (RequestInfo)Requests[i];
+                            if (!ri.HasCom&&
+                                tfloor!=ri.Floor&&ri.Floor <= from && ri.Floor >= to)
+                                count++;
+                            tfloor = ri.Floor;
+                        }
+                    }
+                    else //向上运行时
+                    {
+                        //计算要到达的最高楼层
+                        int max = GetNeedRunMaxFloor();
+                        if (max<from)
+                        {
+                            return ComRunToFloorStopNum(from, from, to, EleStatus.EsRunDown);
+                        }
+                        //先运行到最高层
+                        count += ComRunToFloorStopNum(from,from, max, EleStatus.EsRunUp);
+                        SetAllRequsetComStatus(from,max,true);//防止重复计算，因为这些楼层已经到过
+                        //再运行到目的层
+                        count += ComRunToFloorStopNum(max, max, to, EleStatus.EsRunDown);
+                    }
+                }
+                return count;
+            }
+            
+            //now->from
+           count = ComRunToFloorStopNum(now, now, from, status);
+           SetAllRequsetComStatus(now>from?from:now,now>from?now:from,true);
+           //from->to
+           count += ComRunToFloorStopNum(from, from, to, status);
+           return count;
+        }
+
+        /// <summary>
+        /// 计算当前电梯运行到某一层需要时间
+        /// </summary>
+        /// <param name="to"></param>
+        /// <returns></returns>
+        public int ComNowRunToFloor(int to)
+        {
+            return ComRunToFloor(NowFloor, to);
+        }
+
+        /// <summary>
+        /// 计算电梯到用户起始层再到目的层需要的时间
+        /// </summary>
+        /// <param name="from"></param>
+        /// <param name="to"></param>
+        /// <returns></returns>
+        public int ComRunToFloor(int from,int to)
+        {
+            if (NowStatus == EleStatus.EsStop)
+                return int.MaxValue;
+
+            int usetime = 0;
+            switch (NowStatus)
+            {
+                case EleStatus.EsWait:
+                    usetime += to > NowFloor
+                                  ? (to - NowFloor)*_elevatorBank.OneFloorRunTime
+                                  : (NowFloor
+                                     - to)*_elevatorBank.OneFloorRunTime;
+                    break;
+                case EleStatus.EsRunUp:
+                    int floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunUp);
+                    usetime += (floorcount - 1)*_elevatorBank.OneFloorRunTime + NextFloorTime;
+                    SetAllRequsetComStatus(1,_elevatorBank.AllFloor,false);
+                    int stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunUp);
+                    usetime += stopnum*_elevatorBank.StopOverTime;
+                    break;
+                case EleStatus.EsRunUpWait:
+                    floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunUp);
+                    usetime += floorcount* _elevatorBank.OneFloorRunTime;
+                    SetAllRequsetComStatus(1, _elevatorBank.AllFloor, false);
+                    stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunUp);
+                    usetime += stopnum * _elevatorBank.StopOverTime+NextFloorTime;
+                    break;
+                case EleStatus.EsRunDown:
+                    floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunDown);
+                    usetime += (floorcount-1) * _elevatorBank.OneFloorRunTime + NextFloorTime;
+                    SetAllRequsetComStatus(1, _elevatorBank.AllFloor, false);
+                    stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunDown);
+                    usetime += stopnum * _elevatorBank.StopOverTime ;
+                    break;
+                case EleStatus.EsRunDownWait:
+                    floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunDown);
+                    usetime += floorcount * _elevatorBank.OneFloorRunTime;
+                    SetAllRequsetComStatus(1, _elevatorBank.AllFloor, false);
+                    stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunDown);
+                    usetime += stopnum * _elevatorBank.StopOverTime + NextFloorTime;
+                    break;
+            }
+            return usetime;
         }
     }
 }

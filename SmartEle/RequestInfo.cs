@@ -34,15 +34,21 @@ namespace SmartEle
         public OperType Oper;
 
         /// <summary>
-        /// 请求楼层
+        /// 请求目的楼层
         /// </summary>
         public int Floor;
+
+        /// <summary>
+        /// 是否计算过
+        /// </summary>
+        public bool HasCom;
 
         public RequestInfo(User user, OperType oper, int floor)
         {
             RequestUser = user;
             Oper = oper;
             Floor = floor;
+            HasCom = false;
         }
     }
 }

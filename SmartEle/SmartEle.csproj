@@ -40,10 +40,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ApplicationInfo.cs" />
     <Compile Include="RequestInfo.cs" />
     <Compile Include="User.cs" />
     <Compile Include="Ele.cs" />
-    <Compile Include="Eles.cs" />
+    <Compile Include="ElevatorBank.cs" />
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
