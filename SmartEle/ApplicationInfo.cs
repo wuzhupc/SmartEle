@@ -13,7 +13,7 @@ namespace SmartEle
         /// <summary>
         /// 用户
         /// </summary>
-        private ArrayList _users;
+        private readonly ArrayList _users;
 
         private static ApplicationInfo _info;
 
@@ -23,9 +23,9 @@ namespace SmartEle
         /// <returns></returns>
         public static ApplicationInfo GetInfo()
         {
-                if(_info ==null)
-                    _info = new ApplicationInfo();
-                return _info;
+            if (_info == null)
+                _info = new ApplicationInfo();
+            return _info;
         }
 
         private ApplicationInfo()
@@ -57,9 +57,21 @@ namespace SmartEle
             _elevatorBank = elevatorBank;
         }
 
-        public void NewUser()
+        private int GetNewUserId()
         {
-            //TODO
+            if (_users == null || _users.Count <= 0)
+                return 1;
+            return _users.Count + 1;
+        }
+
+        /// <summary>
+        /// 新建用户
+        /// </summary>
+        /// <param name="from">用户当前所在楼层</param>
+        public void NewUser(int from)
+        {
+            User user = new User(GetNewUserId(),from,_elevatorBank);
+            _users.Add(user);
         }
 
     }

@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Timers;
 
 namespace SmartEle
 {
@@ -68,7 +69,7 @@ namespace SmartEle
         /// <summary>
         /// 电梯组运行状态
         /// </summary>
-        private readonly ElevatorBankStauts _runstatus;
+        private  ElevatorBankStauts _runstatus;
         /// <summary>
         /// 电梯组运行状态
         /// </summary>
@@ -76,6 +77,8 @@ namespace SmartEle
         {
             get { return _runstatus; }
         }
+
+        private readonly Timer _timer;
 
         /// <summary>
         /// 电梯组构造函数
@@ -90,6 +93,27 @@ namespace SmartEle
             _stopover = stopover<1?1:stopover;
             _ele = new ArrayList();
             _runstatus = ElevatorBankStauts.EssStop;
+
+            _timer = new Timer(1000);
+            _timer.Elapsed += new ElapsedEventHandler(TimerElapsed);
+        }
+
+        /// <summary>
+        /// 定时处理
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void TimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            if (_runstatus == ElevatorBankStauts.EssPause || _runstatus == ElevatorBankStauts.EssStop)
+                return;
+            if (_ele == null || _ele.Count <= 0)
+                return;
+            for (int i = 0; i < _ele.Count; i++)
+            {
+                Ele ele = (Ele) _ele[i];
+                ele.OnRun();
+            }
         }
 
         /// <summary>
@@ -107,15 +131,24 @@ namespace SmartEle
                 return null;
             if (_ele.Count == 1)
                 return (Ele) _ele[0];
-
-           //TODO
-            return null;
+            int index = 0;
+            int min = int.MaxValue;
+            for (int i = 0; i < _ele.Count; i++)
+            {
+                Ele ele = (Ele) _ele[i];
+                int time = ele.ComRunToFloor(user.FromFloor, to);
+                if (time >= min) continue;
+                index = i;
+                min = time;
+            }
+            return (Ele) _ele[index];
         }
 
         public int GetNewEleid()
         {
-            //TODO
-            return 1;
+            if (_ele == null || _ele.Count <= 0)
+                return 1;
+            return _ele.Count+1;
         }
 
         /// <summary>
@@ -123,29 +156,43 @@ namespace SmartEle
         /// </summary>
         public void RunElevatorBank()
         {
+            if (_runstatus == ElevatorBankStauts.EssRun)
+                return;
+            //启动定时器
+            _runstatus = ElevatorBankStauts.EssRun;
+            _timer.AutoReset = true;
+            _timer.Enabled = true;
         }
 
         /// <summary>
         /// 停止电梯组运行,相当于重置
         /// </summary>
         public void StopElevatorBank()
-        {
-            
+        { 
+            //停止定时器
+            _timer.Enabled = false;
+            if(_ele!=null&&_ele.Count>0)
+                _ele.Clear();
+            _runstatus = ElevatorBankStauts.EssStop;
+           
         }
         /// <summary>
         /// 暂停电梯组运行
         /// </summary>
         public void PauseElevatorBank()
         {
-            
+            //停止定时器
+            _timer.Enabled = false;
+            _runstatus = ElevatorBankStauts.EssPause;
         }
 
         /// <summary>
         /// 新增电梯
         /// </summary>
-        public void NewEle()
+        public void NewEle(int initfloor)
         {
-            //TODO
+            Ele ele = new Ele(this,GetNewEleid(),initfloor);
+            _ele.Add(ele);
         }
     }
 }

@@ -169,15 +169,15 @@ namespace SmartEle
                 if (NowFloor == _elevatorBank.AllFloor || NowFloor >=
                     GetNeedRunMaxFloor())
                 {
-                    NowStatus = NowStatus == EleStatus.EsRunUp ? EleStatus.EsRunDown : EleStatus.EsRunDownWait;
+                    NowStatus = (NowStatus == EleStatus.EsRunUp ? EleStatus.EsRunDown : EleStatus.EsRunDownWait);
                 }
             }
-            else
+            else if (NowStatus == EleStatus.EsRunDown || NowStatus == EleStatus.EsRunDownWait)
             {
                 if (NowFloor == 1 || NowFloor >=
                     GetNeedRunMinFloor())
                 {
-                    NowStatus = NowStatus == EleStatus.EsRunDown ? EleStatus.EsRunUp : EleStatus.EsRunUpWait;
+                    NowStatus = (NowStatus == EleStatus.EsRunDown ? EleStatus.EsRunUp : EleStatus.EsRunUpWait);
                 }  
             }
 
