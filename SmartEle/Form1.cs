@@ -71,7 +71,7 @@ namespace SmartEle
             {
                 return;
             }
-            for (int i = 0; i < users.Count; i++)
+            for (int i = users.Count-1; i >= 0; i--)
             {
                 User user = (User)users[i];
 
