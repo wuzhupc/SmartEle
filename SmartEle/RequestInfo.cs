@@ -43,12 +43,18 @@ namespace SmartEle
         /// </summary>
         public bool HasCom;
 
+        /// <summary>
+        /// 用于设置还需要运行楼层
+        /// </summary>
+        public int RunFloor;
+
         public RequestInfo(User user, OperType oper, int floor)
         {
             RequestUser = user;
             Oper = oper;
             Floor = floor;
             HasCom = false;
+            RunFloor = 0;
         }
     }
 }

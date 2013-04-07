@@ -66,6 +66,11 @@ namespace SmartEle
         /// </summary>
         private readonly ArrayList _ele;
 
+        public ArrayList Eles
+        {
+            get { return _ele; }
+        }
+
         /// <summary>
         /// 电梯组运行状态
         /// </summary>
@@ -96,6 +101,17 @@ namespace SmartEle
 
             _timer = new Timer(1000);
             _timer.Elapsed += new ElapsedEventHandler(TimerElapsed);
+        }
+
+
+        public void Dispose()
+        {
+            if (_timer != null)
+            {
+                if(_timer.Enabled)
+                    _timer.Stop();
+                _timer.Dispose();
+            }
         }
 
         /// <summary>
@@ -136,7 +152,7 @@ namespace SmartEle
             for (int i = 0; i < _ele.Count; i++)
             {
                 Ele ele = (Ele) _ele[i];
-                int time = ele.ComRunToFloor(user.FromFloor, to);
+                int time = ele.ComRunToFloorTime(user.FromFloor, to);
                 if (time >= min) continue;
                 index = i;
                 min = time;

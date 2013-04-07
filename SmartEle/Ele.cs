@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 
 namespace SmartEle
 {
@@ -58,6 +59,34 @@ namespace SmartEle
         /// </summary>
         public EleStatus NowStatus;
 
+        public string Name
+        {
+            get { return "电梯" + Eleid; }
+        }
+
+        public string NowStatusDesc
+        {
+            get
+            {
+                switch (NowStatus)
+                {
+                        case EleStatus.EsStop:
+                        return "停止运行";
+                        case EleStatus.EsWait:
+                        return "等待中";
+                        case EleStatus.EsRunUp:
+                        return "向上运行";
+                        case EleStatus.EsRunUpWait:
+                        return "向上运行(停留)";
+                        case EleStatus.EsRunDown:
+                        return "向下运行";
+                        case EleStatus.EsRunDownWait:
+                        return "向下运行(停留)";
+                }
+                return "";
+            }
+        }
+
         /// <summary>
         /// 运行到下一层或上一层还要等待时间
         /// </summary>
@@ -67,6 +96,53 @@ namespace SmartEle
         /// 当前电梯请求信息
         /// </summary>
         public ArrayList Requests;
+
+
+        /// <summary>
+        ///电梯中的用户信息，用;分隔开
+        /// </summary>
+        public string InEleUsers
+        {
+            get
+            {
+                string result = "";
+                if (Requests != null && Requests.Count > 0)
+                {
+                    for (int i = 0; i < Requests.Count; i++)
+                    {
+                        RequestInfo ri = (RequestInfo) Requests[i];
+                        if (ri.Oper == OperType.OtOut&&ri.RequestUser.Status==UserStatus.UsInEle)
+                        {
+                            result += ri.RequestUser.Name+";";
+                        }
+                    }
+                }
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// 等待电梯的用户信息，用;分隔开
+        /// </summary>
+        public string WaitEleUsers
+        {
+            get
+            {
+                string result = "";
+                if (Requests != null && Requests.Count > 0)
+                {
+                    for (int i = 0; i < Requests.Count; i++)
+                    {
+                        RequestInfo ri = (RequestInfo)Requests[i];
+                        if (ri.Oper == OperType.OtIn)
+                        {
+                            result += ri.RequestUser.Name+";";
+                        }
+                    }
+                }
+                return result;
+            }
+        }
 
         /// <summary>
         /// 构造函数
@@ -174,26 +250,45 @@ namespace SmartEle
             }
             else if (NowStatus == EleStatus.EsRunDown || NowStatus == EleStatus.EsRunDownWait)
             {
-                if (NowFloor == 1 || NowFloor >=
+                if (NowFloor == 1 || NowFloor <=
                     GetNeedRunMinFloor())
                 {
                     NowStatus = (NowStatus == EleStatus.EsRunDown ? EleStatus.EsRunUp : EleStatus.EsRunUpWait);
                 }  
             }
+            //重新计算所有请求还需要运行楼层数
+            UpdateAllRequestRunFloor();
+        }
 
+        private void UpdateAllRequestRunFloor()
+        {
+            if (Requests == null || Requests.Count == 0)
+                return;
+            for (int i = 0; i < Requests.Count; i++)
+            {
+                RequestInfo ri = (RequestInfo) Requests[i];
+                if (ri.Oper == OperType.OtIn)
+                    ri.RunFloor = ComRunToFloorNum(NowFloor, ri.Floor, ri.Floor, NowStatus);
+                else
+                {
+                    if (ri.RequestUser.Status == UserStatus.UsInEle)
+                        ri.RunFloor = ComRunToFloorNum(NowFloor, ri.Floor, ri.Floor, NowStatus);
+                    else
+                        ri.RunFloor = ComRunToFloorNum(NowFloor, ri.RequestUser.FromFloor, ri.Floor, NowStatus);
+                }
+            }
         }
 
         /// <summary>
         /// 增加请求信息
         /// </summary>
         /// <param name="user"></param>
-        /// <param name="to"></param>
-        public bool AddUserRequest(User user, int to)
+        public bool AddUserRequest(User user,int to)
         {
             if (Requests == null || user == null)
                 return false;
             //只有用户非在电梯内
-            if (user.Status != UserStatus.UsInEle)
+            if (user.Status == UserStatus.UsInEle)
                 return false;
             AddInRequest(user);
             AddOutRequest(user,to);
@@ -244,7 +339,7 @@ namespace SmartEle
             RemoveInRequest(user);
 
             RequestInfo newri = new RequestInfo(user, OperType.OtIn, user.FromFloor);
-            
+            newri.RunFloor = ComRunToFloorNum(NowFloor, newri.Floor, newri.Floor, NowStatus);
             AddRequest(newri);
 
         }
@@ -259,7 +354,11 @@ namespace SmartEle
             RemoveOutRequest(user);
 
             RequestInfo newri = new RequestInfo(user, OperType.OtOut, to);
-
+            if (newri.RequestUser.Status == UserStatus.UsInEle)
+                newri.RunFloor = ComRunToFloorNum(NowFloor, newri.Floor, newri.Floor, NowStatus);
+            else
+                newri.RunFloor = ComRunToFloorNum(NowFloor, newri.RequestUser.FromFloor, newri.Floor, NowStatus);
+                
             AddRequest(newri);
         }
 
@@ -274,31 +373,15 @@ namespace SmartEle
             for (int i = 0; i < Requests.Count; i++)
             {
                 RequestInfo ri = (RequestInfo)Requests[i];
-                if (NowStatus == EleStatus.EsWait)
-                {
-                    //找到比用户现在楼层高的，在之前位置插入请求
-                    if (ri.Floor < newri.Floor) continue;
-                    hasinsert = true;
-                    Requests.Insert(i, newri);
-                }
-                else if (NowStatus == EleStatus.EsRunUp || NowStatus == EleStatus.EsRunUpWait)
-                {
-                    //向上运行时，找到比用户现在楼层高的，在之前位置插入请求
-                    if (ri.Floor < newri.Floor) continue;
-                    hasinsert = true;
-                    Requests.Insert(i, newri);
-                }
-                else if (NowStatus == EleStatus.EsRunDown || NowStatus == EleStatus.EsRunDownWait)
-                {
-                    //向下运行时，找到比用户现在楼层低的，在之前位置插入请求
-                    if (ri.Floor > newri.Floor) continue;
-                    hasinsert = true;
-                    Requests.Insert(i, newri);
-                }
+                if (ri.RunFloor <= newri.RunFloor) continue;
+                hasinsert = true;
+                Requests.Insert(i,newri);
+                break;
             }
 
             if (!hasinsert)
-                Requests.Insert(0, newri);
+                Requests.Add(newri);
+            UpdateAllRequestRunFloor();
         }
 
         /// <summary>
@@ -379,8 +462,9 @@ namespace SmartEle
                 {
                     ri.RequestUser.UserInFloor();
                     RemoveInRequest(ri.RequestUser);
+                    //AddOutRequest(ri.RequestUser,ri.RequestUser.ToFloor);
                 }
-                else if (ri.Oper == OperType.OtOut)
+                else if (ri.Oper == OperType.OtOut&&ri.RequestUser.Status == UserStatus.UsInEle)
                 {
                     ri.RequestUser.UserToFloor();
                     RemoveOutRequest(ri.RequestUser);
@@ -409,12 +493,15 @@ namespace SmartEle
         {
             int maxFloor = 1;
             if (Requests == null || Requests.Count == 0)
-                return maxFloor;
+                return 1;
             
             for (int i = 0; i < Requests.Count; i++)
             {
                 RequestInfo ri = (RequestInfo)Requests[i];
-                if (ri.Floor > maxFloor)
+                if(ri==null)
+                    continue;
+                if (ri.Floor > maxFloor&&(ri.Oper==OperType.OtIn||
+                    ri.Oper==OperType.OtOut&&ri.RequestUser.Status==UserStatus.UsInEle))
                     maxFloor = ri.Floor;
             }
             return maxFloor;
@@ -424,29 +511,36 @@ namespace SmartEle
         {
             int minFloor = _elevatorBank.AllFloor;
             if (Requests == null || Requests.Count == 0)
-                return minFloor;
+                return 1;
 
             for (int i = 0; i < Requests.Count; i++)
             {
                 RequestInfo ri = (RequestInfo)Requests[i];
-                if (ri.Floor < minFloor)
+                if (ri.Floor < minFloor&&(ri.Oper == OperType.OtIn ||
+                    ri.Oper == OperType.OtOut && ri.RequestUser.Status == UserStatus.UsInEle))
                     minFloor = ri.Floor;
             }
             return minFloor;
         }
 
         /// <summary>
-        /// 
+        /// 计算now楼层到from楼层再到to楼层需要经过多少楼层
         /// </summary>
         /// <param name="now">当前楼层</param>
         /// <param name="from">起始楼层</param>
         /// <param name="to">目的楼层</param>
-        /// <param name="status">EsRunDown 或者 EsRunUp</param>
+        /// <param name="status"></param>
         /// <returns></returns>
         private int ComRunToFloorNum(int now,int from, int to,EleStatus status)
         {
-            if (status != EleStatus.EsRunDown && status != EleStatus.EsRunUp)
-                return _elevatorBank.AllFloor;
+            if(status==EleStatus.EsRunDownWait)
+                status = EleStatus.EsRunDown;
+            if(status==EleStatus.EsRunUpWait)
+                status = EleStatus.EsRunUp;
+            if (status == EleStatus.EsStop || status == EleStatus.EsWait)
+            {
+                status = now > from ? EleStatus.EsRunDown : EleStatus.EsRunUp;
+            }
             if (now == from)//只要计算起点到终点
             {
                 if (from == to) return 0;
@@ -463,11 +557,11 @@ namespace SmartEle
                 }
                 //from>to
                 if (status == EleStatus.EsRunDown)
-                    return @from - to;
+                    return from - to;
                 int max = GetNeedRunMaxFloor();
-                if (max < @from)
-                    return @from - to;
-                return max - @from + max - to;
+                if (max < from)
+                    return from - to;
+                return max - from + max - to;
             }
             
             //now->from
@@ -508,10 +602,17 @@ namespace SmartEle
         {
             if (Requests == null || Requests.Count == 0)
                 return 0;
-            if (status != EleStatus.EsRunDown && status != EleStatus.EsRunUp)
-                return Requests.Count;
+
+            if (status == EleStatus.EsRunDownWait)
+                status = EleStatus.EsRunDown;
+            if (status == EleStatus.EsRunUpWait)
+                status = EleStatus.EsRunUp;
+            if (status == EleStatus.EsStop || status == EleStatus.EsWait)
+            {
+                status = now > from ? EleStatus.EsRunDown : EleStatus.EsRunUp;
+            }
             
-            int count;
+            int count=0;
             if (now == from)//只要计算起点到终点
             {
                 if (from == to) return 0;
@@ -577,6 +678,8 @@ namespace SmartEle
                         count += ComRunToFloorStopNum(max, max, to, EleStatus.EsRunDown);
                     }
                 }
+                
+
                 return count;
             }
             
@@ -585,17 +688,8 @@ namespace SmartEle
            SetAllRequsetComStatus(now>from?from:now,now>from?now:from,true);
            //from->to
            count += ComRunToFloorStopNum(from, from, to, status);
+            //
            return count;
-        }
-
-        /// <summary>
-        /// 计算当前电梯运行到某一层需要时间
-        /// </summary>
-        /// <param name="to"></param>
-        /// <returns></returns>
-        public int ComNowRunToFloor(int to)
-        {
-            return ComRunToFloor(NowFloor, to);
         }
 
         /// <summary>
@@ -604,7 +698,7 @@ namespace SmartEle
         /// <param name="from"></param>
         /// <param name="to"></param>
         /// <returns></returns>
-        public int ComRunToFloor(int from,int to)
+        public int ComRunToFloorTime(int from,int to)
         {
             if (NowStatus == EleStatus.EsStop)
                 return int.MaxValue;
@@ -612,39 +706,42 @@ namespace SmartEle
             int usetime = 0;
             switch (NowStatus)
             {
-                case EleStatus.EsWait:
-                    usetime += to > NowFloor
-                                  ? (to - NowFloor)*_elevatorBank.OneFloorRunTime
-                                  : (NowFloor
-                                     - to)*_elevatorBank.OneFloorRunTime;
-                    break;
                 case EleStatus.EsRunUp:
                     int floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunUp);
                     usetime += (floorcount - 1)*_elevatorBank.OneFloorRunTime + NextFloorTime;
                     SetAllRequsetComStatus(1,_elevatorBank.AllFloor,false);
                     int stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunUp);
-                    usetime += stopnum*_elevatorBank.StopOverTime;
+                    usetime += (stopnum>0?stopnum-1:0)*_elevatorBank.StopOverTime;
+                    break;
+                case EleStatus.EsWait:
+                    //usetime += (Math.Abs(NowFloor - from)+Math.Abs(to-from))*_elevatorBank.OneFloorRunTime
+                    //+_elevatorBank.StopOverTime;
+                    floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsWait);
+                    usetime += floorcount * _elevatorBank.OneFloorRunTime;
+                    SetAllRequsetComStatus(1, _elevatorBank.AllFloor, false);
+                    stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsWait);
+                    usetime += (stopnum > 0 ? stopnum - 1 : 0) * _elevatorBank.StopOverTime + NextFloorTime;
                     break;
                 case EleStatus.EsRunUpWait:
                     floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunUp);
                     usetime += floorcount* _elevatorBank.OneFloorRunTime;
                     SetAllRequsetComStatus(1, _elevatorBank.AllFloor, false);
                     stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunUp);
-                    usetime += stopnum * _elevatorBank.StopOverTime+NextFloorTime;
+                    usetime += (stopnum > 0 ? stopnum - 1 : 0) * _elevatorBank.StopOverTime + NextFloorTime;
                     break;
                 case EleStatus.EsRunDown:
                     floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunDown);
                     usetime += (floorcount-1) * _elevatorBank.OneFloorRunTime + NextFloorTime;
                     SetAllRequsetComStatus(1, _elevatorBank.AllFloor, false);
                     stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunDown);
-                    usetime += stopnum * _elevatorBank.StopOverTime ;
+                    usetime += (stopnum > 0 ? stopnum - 1 : 0) * _elevatorBank.StopOverTime;
                     break;
                 case EleStatus.EsRunDownWait:
                     floorcount = ComRunToFloorNum(NowFloor, from, to, EleStatus.EsRunDown);
                     usetime += floorcount * _elevatorBank.OneFloorRunTime;
                     SetAllRequsetComStatus(1, _elevatorBank.AllFloor, false);
                     stopnum = ComRunToFloorStopNum(NowFloor, from, to, EleStatus.EsRunDown);
-                    usetime += stopnum * _elevatorBank.StopOverTime + NextFloorTime;
+                    usetime += (stopnum > 0 ? stopnum - 1 : 0) * _elevatorBank.StopOverTime + NextFloorTime;
                     break;
             }
             return usetime;

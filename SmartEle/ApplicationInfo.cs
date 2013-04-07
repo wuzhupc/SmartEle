@@ -15,6 +15,11 @@ namespace SmartEle
         /// </summary>
         private readonly ArrayList _users;
 
+        public ArrayList Users
+        {
+            get { return _users; }
+        }
+
         private static ApplicationInfo _info;
 
         /// <summary>
@@ -68,10 +73,11 @@ namespace SmartEle
         /// 新建用户
         /// </summary>
         /// <param name="from">用户当前所在楼层</param>
-        public void NewUser(int from)
+        public User NewUser(int from)
         {
             User user = new User(GetNewUserId(),from,_elevatorBank);
             _users.Add(user);
+            return user;
         }
 
     }

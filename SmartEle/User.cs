@@ -56,6 +56,29 @@
         /// </summary>
         public UserStatus Status;
 
+        public string Name
+        {
+            get { return "用户" + UserId; }
+        }
+
+        public string NowStatusDesc
+        {
+            get
+            {
+                switch (Status)
+                {
+                    case UserStatus.UsNone:
+                        if (NowFloor == ToFloor) return "已到达";
+                        return "无请求";
+                    case UserStatus.UsWait:
+                        return "等待电梯";
+                    case UserStatus.UsInEle:
+                        return "在电梯中";
+                }
+                return "";
+            }
+        }
+
         /// <summary>
         /// 用户正在等待或在某个电梯
         /// </summary>
@@ -77,6 +100,8 @@
             _userid = id;
             Status = UserStatus.UsNone;
             FromFloor = from;
+            NowFloor = from;
+            UseTime = 0;
             InElevatorBank = elevatorBank;
         }
 
@@ -104,14 +129,14 @@
                             //请求电梯失败
                             return "暂无可使用电梯！";
                         }
+                        ele.AddUserRequest(this,to);
                         return UserWaitFloor(ele) ? string.Empty : "等待电梯失败！";
                     }
                 case UserStatus.UsWait:
                     {
                         //用户在等待电梯状态下重新请求时，先移除原目的
-                        if (InOrWaitEle == null)
-                            return "无效请求信息！";
-                        InOrWaitEle.RemoveUserRequest(this);
+                        if (InOrWaitEle != null)
+                            InOrWaitEle.RemoveUserRequest(this);
                         //重新生成请地注信息
                         if (FromFloor == to)
                             return "您已经在目的楼层";
@@ -124,6 +149,7 @@
                             //请求电梯失败
                             return "暂无可使用电梯！";
                         }
+                        ele.AddUserRequest(this,to);
                         return UserWaitFloor(ele) ? string.Empty : "等待电梯失败！";
                     }
                 case UserStatus.UsInEle:
@@ -161,7 +187,7 @@
         public void TickUseTime()
         {
             if (Status != UserStatus.UsNone)
-                UseTime++;
+                UseTime+=1;
         }
 
         /// <summary>
@@ -174,7 +200,7 @@
                 return 0;
             if (Status == UserStatus.UsNone||InOrWaitEle==null)
                 return int.MaxValue;
-            return InOrWaitEle.ComNowRunToFloor(ToFloor);
+            return InOrWaitEle.ComRunToFloorTime(NowFloor,FromFloor);
         }
 
         /// <summary>
@@ -186,7 +212,7 @@
             if (Status == UserStatus.UsNone || InOrWaitEle == null)
                 return int.MaxValue;
 
-            return InOrWaitEle.ComRunToFloor(Status == UserStatus.UsInEle?NowFloor:FromFloor,ToFloor);
+            return InOrWaitEle.ComRunToFloorTime(Status == UserStatus.UsInEle?NowFloor:FromFloor,ToFloor);
         }
 
         /// <summary>
